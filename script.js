@@ -1,4 +1,6 @@
-console.log("📋 SCRIPT LOADED");
+const OPENAI_API_KEY = "YOUR OPEN API KEY";
+
+const SYSTEM_PROMT = "";
 
 function main() {
   listen();
@@ -19,7 +21,6 @@ async function listen() {
   recognition.start();
 
   // 4. Start the audio listener
-  console.log("Speech recognition activated. Speak into your microphone.");
   // 6. Handle errors
   recognition.onstart = () => {
     console.log("Speech recognition started...");
@@ -28,7 +29,7 @@ async function listen() {
   // 5. Handle the result event
   recognition.onresult = async (event) => {
     const transcript = event.results[event.results.length - 1][0].transcript;
-    console.log("User: ", transcript);
+    // Make the LLM call now with user speech
     llmCall(transcript);
   };
 
@@ -36,17 +37,10 @@ async function listen() {
   recognition.onerror = (event) => {
     console.error("Speech recognition error detected: " + event.error);
   };
-
-  // Make the LLM call now with user speech
 }
 
 // Step 2 Add system prompt and send the user question to LLM
 async function llmCall(userText = "") {
-  const OPENAI_API_KEY =
-    "YOUR OPEN API KEY";
-
-  const SYSTEM_PROMT = "";
-
   const llmResponse = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -59,13 +53,42 @@ async function llmCall(userText = "") {
         User Query:${userText}`,
     }),
   }).then((res) => res.json());
-  console.log("📋 llmResponse ", llmResponse);
   const textOutput = llmResponse.output
     .flatMap((item) => item.content ?? [])
     .find((content) => content.type === "output_text");
 
-  console.log("📋 textOutput", textOutput);
-  return textOutput?.text ?? "Unable to connect with LLM";
+  // convert the llm response to speech
+  await speak(textOutput?.text ?? "");
+}
+
+// convert text from llm response to speech
+async function speak(llmResponse) {
+
+  const llmSpeechMp3Response = await fetch(
+    "https://api.openai.com/v1/audio/speech",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-tts",
+        voice: "sage",
+        input: `System Context: ${SYSTEM_PROMT}
+        User Query:${llmResponse}.`,
+        instructions: "Always speak in a cheerfull warm and natural tone.",
+      }),
+    },
+  );
+
+  const audioBlob = await llmSpeechMp3Response.blob();
+  const audioUrl = URL.createObjectURL(audioBlob);
+  const audio = new Audio(audioUrl);
+
+  audio.play();
+
+  audio.onended = () => URL.revokeObjectURL(audioUrl);
 }
 
 main();
